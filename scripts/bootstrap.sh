@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ai-video-studio — per-machine bootstrap.
+# second-unit — per-machine bootstrap.
 # Idempotent: safe to re-run any time. Verifies the toolchain, optionally pulls
 # your app into ./app/, installs recording deps, prepares the library folders.
 set -euo pipefail
@@ -13,7 +13,7 @@ fi
 # shellcheck disable=SC1091
 source "$STUDIO_DIR/config.env"
 
-echo "== ai-video-studio bootstrap =="
+echo "== second-unit bootstrap =="
 echo "studio: $STUDIO_DIR"
 
 # --- 1. Toolchain ------------------------------------------------------------

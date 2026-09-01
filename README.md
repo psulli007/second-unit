@@ -1,7 +1,11 @@
-# ai-video-studio
+# second unit
+
+> In film, the *second unit* is the crew that shoots everything the principal unit doesn't:
+> plates, inserts, establishing shots, product close-ups, b-roll. No stars, no dialogue —
+> just the footage the film can't be cut without.
 
 A working studio for making **product demos, marketing videos, and AI-generated character
-film** — the recording engine, the cutting pipeline, and a set of Claude skills that hold the
+film** — the recording engine, the cutting pipeline, and a set of Claude skills holding the
 prompt craft for image and video generation.
 
 It came out of shipping 30+ videos for one product: feature demos filmed from real UI,
@@ -23,7 +27,7 @@ for everything around it.** Fabricated UI reads as fake to viewers who can't say
 ## Quick start
 
 ```bash
-git clone <your-fork> ai-video-studio && cd ai-video-studio
+git clone <your-fork> second-unit && cd second-unit
 cp config.example.env config.env
 scripts/bootstrap.sh                  # toolchain check, deps, Chromium, library dirs
 
