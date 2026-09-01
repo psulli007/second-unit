@@ -24,9 +24,9 @@ frames sampled inside known speech and known silence windows):
 | `minimax_h3` | open ✓ | closed ✓ | open ✓ | closed ✓ | open ✓ |
 | `wan2_7` | open ✓ | closed ✓ | open ✓ | closed ✓ | **closed ✗** |
 
-Peter picked the same winner by eye before seeing the frame data — *"the first video lip sync was
-better then the second the second forgot to sync the word okay."* Wan 2.7 genuinely dropped the
-final word; both frames inside "Okay" show a shut beak. Trust the human read, then confirm it.
+A human picked the same winner by eye before seeing the frame data — *"the first lip sync was
+better; the second forgot to sync the word okay."* Wan 2.7 genuinely dropped the final word; both
+frames inside "Okay" show a shut mouth. Trust the human read, then confirm it with frames.
 
 **It keeps YOUR voice track — but as a re-encode, not a passthrough.** Critical check, because
 these models can generate their own audio: compare the output's silence map to the source VO's.
@@ -147,10 +147,11 @@ Fish VO separately, then hand both to sync.so as a final pass.
    the same tier finished in **under 5 minutes**. Treat ~10 min as the planning number and poll
    rather than assuming a fixed wait.
 2. **Watermarked** on the free/trial tier — a visible "sync.so" logo top-left plus a centered
-   mark during some frames. **Creator, $19/mo, is the lowest tier that removes it.** ✅ Peter
-   upgraded 2026-07-30 and the next production clip came back clean — checked across six sampled
-   frames, no logo top-left, no centered mark. Hobbyist ($5/mo) keeps the watermark. Creator also
-   covers clips up to 5 min and 3 concurrent jobs.
+   mark during some frames. **Creator, $19/mo, was the lowest tier that removed it**
+   (verified: after upgrading, the next production clip came back clean across six sampled
+   frames — no logo top-left, no centered mark). Hobbyist ($5/mo) keeps the watermark. Creator
+   also covered clips up to 5 min and 3 concurrent jobs. Re-check current pricing before relying
+   on this.
 3. **Output resolution matched input resolution** (720p in, 720p out) — despite `sync-3`'s
    "4K native" billing, it did not upscale. Feed it a 4K source clip (per the standing 4K rule
    above) if 4K output is needed; don't expect it to upscale for you.
@@ -191,9 +192,10 @@ Given this, the real workflow for a talking beat is now: **generate the video AN
 separately as always, then run the finished pair through sync.so as a last step** — rather than
 routing audio through Seedance's `audio_references` role at all.
 
-**Peter's own review confirmed it** ("that was pretty good actually") after watching the actual
+**A human review confirmed it** ("that was pretty good actually") after watching the actual
 watermarked test clip, not just the frame-comparison numbers. Both checks agree this is a real
-option for a character talking on camera.
+option for a character talking on camera — and the two agreeing is the point: neither the metric
+nor the eyeball is trustworthy alone.
 
 ### ❌ IT SILENTLY NO-OPS ON NON-PRESENTER FRAMING (2026-07-30)
 
