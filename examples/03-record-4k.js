@@ -26,7 +26,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const rec = await setup4k(chromium, MODE, `${OUT}/frames`);
   const { page } = rec;
 
-  await page.waitForSelector('[data-testid="main-content"]', { timeout: 30000 });
+  await page.waitForSelector('[data-testid=main-content]', { timeout: 30000 });
   await page.waitForTimeout(2500);
 
   // Desktop only: if your app renders as a panel/modal floating in a page
@@ -54,15 +54,23 @@ fs.mkdirSync(OUT, { recursive: true });
   }
   await page.waitForTimeout(1500);
 
-  const input = page.getByRole('searchbox').first();
-  if (await input.count()) {
-    const b = await input.boundingBox();
-    if (b) {
-      await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
-      await input.pressSequentially('a real query', { delay: 90 });
-      await page.waitForTimeout(3000);
-    }
-  }
+  // Open the create flow and type into it. Note the zoom factor again: locator-based
+  // clicks are fine (Playwright resolves real coordinates), but any raw mouse.move or
+  // wheel distance you write by hand has to be scaled by rec.mode.zoom.
+  await page.getByTestId('create').click();
+  await page.waitForSelector('dialog[open]', { timeout: 10000 });
+  await page.waitForTimeout(1200);
+
+  const input = page.getByTestId('name');
+  await input.click();
+  await input.pressSequentially('Launch assets', { delay: 90 });
+  await page.waitForTimeout(900);
+
+  // The payoff: a real async wait, filmed at true speed.
+  await page.getByTestId('save').click();
+  await page.waitForSelector('[data-testid=result]', { timeout: 30000 });
+  await page.waitForTimeout(2600);
+
   await rec.stop();
 
   console.log(`frames captured: ${rec.frames.length}`);

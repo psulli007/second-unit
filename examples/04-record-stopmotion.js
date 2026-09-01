@@ -42,7 +42,7 @@ fs.mkdirSync(OUT, { recursive: true });
   });
   const { page, t } = rec;
 
-  await page.waitForSelector('[data-testid="main-content"]', { timeout: 30000 });
+  await page.waitForSelector('[data-testid=main-content]', { timeout: 30000 });
   await t.settle(2500);
   if (MODE === 'desktop') { await fullbleed(page); await t.settle(600); }
 
@@ -54,13 +54,22 @@ fs.mkdirSync(OUT, { recursive: true });
   await t.glide(0, 1.8);        // back to top
   await t.hold(1.0);
 
-  const input = page.getByRole('searchbox').first();
-  if (await input.count()) {
-    await t.type(input, 'a real query');
-    await t.settle(1200);       // let results land — not on the timeline
-    await t.live(2.0);          // capture them arriving in real time
-    await t.hold(2.2);          // final state
-  }
+  // Open the create flow. t.tap() spends two frames catching the click ripple, which is
+  // what makes a click legible at 30fps instead of a state that changes for no reason.
+  await t.tap(page.getByTestId('create'));
+  await page.waitForSelector('dialog[open]', { timeout: 10000 });
+  await t.hold(1.0);
+
+  await t.type(page.getByTestId('name'), 'Launch assets');
+  await t.hold(0.8);
+
+  // The async beat. `live` captures in real time and stamps each frame with its true
+  // elapsed duration, so the wait plays back at the length it actually took. This is the
+  // shot that proves the footage is real — never speed it up.
+  await t.tap(page.getByTestId('save'));
+  await t.live(2.6);
+  await page.waitForSelector('[data-testid=result]', { timeout: 30000 });
+  await t.hold(2.4);
 
   console.log(`frames: ${rec.frames.length}, wall: ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   const out = assemble(rec.frames, `${OUT}/take-${MODE}.mp4`);

@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nimbus — demo app</title>
+<!--
+  A deliberately small, fake-but-honest app, here so a fresh clone of this repo can
+  record a real video before you have configured anything.
+
+  It is NOT a mock of a real product and it is not what you should film. It exists so
+  that `node examples/01-record-desktop.js` produces something on a machine that has
+  just been set up — which is how you find out whether ffmpeg, Chromium and the cutter
+  all work, without also debugging your own app's selectors at the same time.
+
+  Design notes, because the recorders depend on them:
+   - opens on a POPULATED list, never an empty state
+   - real async work with a visible pending state (the `live` beat in stop-motion)
+   - images that decode, so the "wait for naturalWidth" rule has something to wait for
+   - stable [data-testid] hooks, so the examples can use durable selectors
+   - responsive down to 390px, so the mobile recorder gets a real mobile layout
+-->
+<style>
+  :root {
+    --accent: #4F46E5; --accent-2: #7C6BF5;
+    --ink: #1F2430; --muted: #6B7280; --paper: #F7F7F9;
+    --card: #FFFFFF; --line: #E5E7EB;
+    --radius: 14px;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font); background: var(--paper); color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* No smooth scrolling: it breaks per-frame scrollTop control in stop-motion capture. */
+  html { scroll-behavior: auto; }
+
+  .app { max-width: 1100px; margin: 0 auto; padding: 0 24px 64px; }
+
+  header {
+    position: sticky; top: 0; z-index: 10; background: rgba(247,247,249,.86);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
+    margin: 0 -24px 28px; padding: 14px 24px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: -.02em; font-size: 18px; }
+  .dot { width: 20px; height: 20px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  .tab {
+    border: 0; background: transparent; font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--muted); padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  }
+  .tab.is-active { background: var(--ink); color: #fff; }
+
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -.03em; }
+  .lede { color: var(--muted); margin-top: 6px; font-size: 15px; }
+  .row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .row .grow { flex: 1 1 260px; }
+
+  button.primary {
+    border: 0; font: inherit; font-weight: 700; font-size: 14px; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    padding: 11px 20px; border-radius: 10px;
+  }
+  button.primary:disabled { opacity: .55; cursor: default; }
+  button.ghost {
+    border: 1px solid var(--line); background: var(--card); font: inherit; font-weight: 600;
+    font-size: 14px; padding: 10px 16px; border-radius: 10px; cursor: pointer; color: var(--ink);
+  }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .card .thumb { aspect-ratio: 16/10; width: 100%; object-fit: cover; display: block; background: #EEE; }
+  .card .body { padding: 13px 15px 16px; }
+  .card h3 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .card p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .chip {
+    display: inline-block; margin-top: 10px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    padding: 4px 9px; border-radius: 999px;
+  }
+  .card.is-new { animation: pop .45s ease-out; box-shadow: 0 0 0 2px var(--accent); }
+  @keyframes pop { from { transform: scale(.94); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+
+  dialog {
+    border: 0; border-radius: 18px; padding: 0; width: min(440px, calc(100vw - 32px));
+    box-shadow: 0 24px 60px rgba(0,0,0,.22);
+  }
+  dialog::backdrop { background: rgba(20,22,30,.42); }
+  .dlg { padding: 24px; }
+  .dlg h2 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+  label { display: block; font-size: 13px; font-weight: 700; margin: 18px 0 6px; }
+  input[type=text] {
+    width: 100%; font: inherit; font-size: 15px; padding: 11px 13px;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .segmented { display: flex; gap: 6px; }
+  .segmented button {
+    flex: 1; border: 1px solid var(--line); background: #fff; font: inherit; font-weight: 600;
+    font-size: 14px; padding: 9px 0; border-radius: 9px; cursor: pointer; color: var(--muted);
+  }
+  .segmented button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, #fff); }
+  .dlg-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+  /* The pending state. A real async wait with something to look at is what makes a
+     demo read as real — it is the beat you keep at 1x in the edit. */
+  .pending { display: flex; align-items: center; gap: 11px; color: var(--muted); font-size: 14px; font-weight: 600; }
+  .spinner {
+    width: 17px; height: 17px; border-radius: 50%; flex: 0 0 auto;
+    border: 2.5px solid var(--line); border-top-color: var(--accent);
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg) } }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--ink); color: #fff; font-size: 14px; font-weight: 600;
+    padding: 12px 20px; border-radius: 999px; box-shadow: 0 8px 26px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  .summary {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 20px; margin-bottom: 24px; display: flex; gap: 32px; flex-wrap: wrap;
+  }
+  .stat .n { font-size: 26px; font-weight: 800; letter-spacing: -.03em; }
+  .stat .k { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+  @media (max-width: 760px) {
+    .app { padding: 0 16px 48px; }
+    header { margin: 0 -16px 22px; padding: 12px 16px; gap: 10px; }
+    .brand span { display: none; }
+    h1 { font-size: 24px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .summary { gap: 20px; padding: 14px 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><div class="dot"></div><span>Nimbus</span></div>
+    <nav>
+      <button class="tab is-active" data-testid="tab-library">Library</button>
+      <button class="tab" data-testid="tab-activity">Activity</button>
+    </nav>
+  </header>
+
+  <!-- data-testid="main-content" is the readiness gate the examples wait on. It is added
+       by script AFTER the first render, so "the element exists" genuinely means "the app
+       has mounted" rather than "the HTML parsed". -->
+  <main id="main">
+    <div class="row">
+      <div class="grow">
+        <h1>Library</h1>
+        <div class="lede">Everything your team has published.</div>
+      </div>
+      <button class="primary" data-testid="create">Create</button>
+    </div>
+
+    <div class="summary" data-testid="summary">
+      <div class="stat"><div class="n" data-testid="stat-count">6</div><div class="k">Items</div></div>
+      <div class="stat"><div class="n">3</div><div class="k">Collections</div></div>
+      <div class="stat"><div class="n">12.4k</div><div class="k">Views</div></div>
+    </div>
+
+    <div class="grid" id="grid" data-testid="grid"></div>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" class="dlg">
+    <h2>Create an item</h2>
+    <label for="name">Name</label>
+    <input type="text" id="name" data-testid="name" placeholder="Untitled" autocomplete="off">
+    <label>Size</label>
+    <div class="segmented" data-testid="size">
+      <button type="button" value="Small">Small</button>
+      <button type="button" value="Medium" aria-pressed="true">Medium</button>
+      <button type="button" value="Large">Large</button>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="ghost" data-testid="cancel">Cancel</button>
+      <button type="button" class="primary" data-testid="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Deterministic SVG thumbnails as data: URIs — no network, so a fresh clone works
+// offline, and every image decodes at a predictable moment.
+function thumb(seed, hue) {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300">
+       <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+         <stop offset="0" stop-color="hsl(${hue} 70% 62%)"/>
+         <stop offset="1" stop-color="hsl(${(hue + 42) % 360} 72% 52%)"/>
+       </linearGradient></defs>
+       <rect width="480" height="300" fill="url(#g)"/>
+       <circle cx="${90 + seed * 37 % 300}" cy="${70 + seed * 53 % 160}" r="${44 + seed * 11 % 40}" fill="rgba(255,255,255,.24)"/>
+       <circle cx="${300 - seed * 23 % 220}" cy="${210 - seed * 31 % 120}" r="${28 + seed * 7 % 30}" fill="rgba(255,255,255,.17)"/>
+     </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+const SEED = [
+  ['Quarterly review deck', 'Updated 2 days ago', 'Deck', 24],
+  ['Onboarding checklist', 'Updated 4 days ago', 'Doc', 96],
+  ['Brand photography', 'Updated last week', 'Album', 168],
+  ['Release notes 4.2', 'Updated last week', 'Doc', 212],
+  ['Field research notes', 'Updated 2 weeks ago', 'Doc', 284],
+  ['Launch assets', 'Updated 3 weeks ago', 'Album', 320],
+];
+
+const grid = document.getElementById('grid');
+function addCard([title, meta, kind, hue], i, isNew) {
+  const el = document.createElement('article');
+  el.className = 'card' + (isNew ? ' is-new' : '');
+  el.dataset.testid = isNew ? 'result' : 'item';
+  el.innerHTML =
+    `<img class="thumb" alt="" src="${thumb(i + 1, hue)}">
+     <div class="body">
+       <h3>${title}</h3>
+       <p>${meta}</p>
+       <span class="chip">${kind}</span>
+     </div>`;
+  if (isNew) grid.prepend(el); else grid.appendChild(el);
+}
+SEED.forEach((s, i) => addCard(s, i, false));
+
+// Mark the app "ready" only once the first paint has happened AND every thumbnail has
+// decoded. This is the same gate the recorders apply, mirrored on the app side so the
+// demo teaches the right pattern rather than papering over it with a sleep.
+Promise.all([...document.images].map(img => img.decode().catch(() => {})))
+  .then(() => requestAnimationFrame(() => {
+    document.getElementById('main').setAttribute('data-testid', 'main-content');
+  }));
+
+// --- tabs ---
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('is-active'));
+  t.classList.add('is-active');
+}));
+
+// --- create dialog ---
+const dlg = document.getElementById('dlg');
+const nameInput = document.getElementById('name');
+document.querySelector('[data-testid=create]').addEventListener('click', () => {
+  nameInput.value = '';
+  dlg.showModal();
+});
+document.querySelector('[data-testid=cancel]').addEventListener('click', () => dlg.close());
+document.querySelectorAll('[data-testid=size] button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-testid=size] button').forEach(x => x.removeAttribute('aria-pressed'));
+  b.setAttribute('aria-pressed', 'true');
+}));
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// Save: a genuine async wait with a visible pending state, then the result appears.
+// The delay is real (not a CSS animation) so `live()` capture and 1x payoff beats have
+// something true to film.
+//
+// The pending state is an OVERLAY rather than a replacement: swapping innerHTML here
+// would destroy the very buttons whose listeners are running, which is a classic way to
+// build a dialog that works once and then silently stops.
+const actions = document.querySelector('.dlg-actions');
+const pending = document.createElement('div');
+pending.className = 'pending';
+pending.innerHTML = '<div class="spinner"></div>Creating…';
+pending.style.display = 'none';
+actions.parentElement.insertBefore(pending, actions);
+
+document.querySelector('[data-testid=save]').addEventListener('click', () => {
+  const title = nameInput.value.trim() || 'Untitled';
+  const size = document.querySelector('[data-testid=size] [aria-pressed=true]')?.value || 'Medium';
+
+  actions.style.display = 'none';
+  pending.style.display = 'flex';
+
+  setTimeout(() => {
+    pending.style.display = 'none';
+    actions.style.display = 'flex';
+    dlg.close();
+    addCard([title, 'Just now', size, 200], SEED.length + 1, true);
+    const n = document.querySelector('[data-testid=stat-count]');
+    n.textContent = String(Number(n.textContent) + 1);
+    toast('Created "' + title + '"');
+  }, 2200);
+});
+</script>
+</body>
+</html>

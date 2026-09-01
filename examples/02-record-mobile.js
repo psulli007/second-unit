@@ -26,7 +26,7 @@ const OUT = path.join(process.cwd(), 'out', 'mobile');
   const T0 = Date.now();
   const mark = (n) => console.log('MARK', n, ((Date.now() - T0) / 1000).toFixed(2) + 's');
 
-  await page.waitForSelector('[data-testid="main-content"]', { timeout: 45000 });
+  await page.waitForSelector('[data-testid=main-content]', { timeout: 45000 });
   mark('landing');
   await page.waitForTimeout(4000);
 
@@ -34,18 +34,18 @@ const OUT = path.join(process.cwd(), 'out', 'mobile');
   // and bottom sheets mid-transform fail Playwright's visibility checks, and a
   // click that silently never lands costs you the whole take.
   mark('open');
-  await tap(page, page.getByRole('button', { name: 'Create' }));
+  await tap(page, page.getByTestId('create'));
   await page.waitForTimeout(1500);
 
   mark('typing');
-  const input = page.getByRole('textbox').first();
+  const input = page.getByTestId('name');
   await input.click();
   await input.pressSequentially('Weeknight plan', { delay: 90 });
   await page.waitForTimeout(1200);
 
   mark('submit');
-  await tap(page, page.getByRole('button', { name: 'Save' }));
-  await page.waitForSelector('[data-testid="result"]', { timeout: 30000 });
+  await tap(page, page.getByTestId('save'));
+  await page.waitForSelector('[data-testid=result]', { timeout: 30000 });
   mark('result');
   await page.waitForTimeout(3500);
 

@@ -24,14 +24,29 @@ for everything around it.** Fabricated UI reads as fake to viewers who can't say
 
 ```bash
 git clone <your-fork> ai-video-studio && cd ai-video-studio
-cp config.example.env config.env      # then edit it — APP_URL and the readiness gate
+cp config.example.env config.env
 scripts/bootstrap.sh                  # toolchain check, deps, Chromium, library dirs
-node examples/01-record-desktop.js    # your first take
-node scripts/qa-take.js out/desktop/*.mp4
+
+node scripts/demo-app.js &            # a small bundled app on :5050
+node examples/01-record-desktop.js    # records it — no configuration needed
+node scripts/qa-take.js out/desktop/*.webm
 ```
 
-`config.env` is the only file you should need to touch to point this at your own product.
-Nothing in `scripts/` hardcodes a URL, a selector, or a brand colour.
+That works on a fresh clone with nothing configured. `demo-app/` is a deliberately small
+fake app that exists so you find out whether ffmpeg, Chromium and the cutter work on your
+machine *before* you also debug your own app's selectors. Keep it around: when a recording
+breaks later, running the same recorder against the demo tells you in a minute whether the
+problem is your app, your selectors, or the studio.
+
+Then point it at your own product — `config.env` is the only file you should need to touch:
+
+```bash
+APP_URL="http://localhost:3000"
+APP_READY_SELECTOR="[data-testid=app-root]"
+```
+
+Nothing in `scripts/`, `lib/` or `templates/` hardcodes a URL, a selector, or a brand colour;
+`node scripts/check.js` enforces that.
 
 **Requirements:** Node 20+, ffmpeg, and a browser Playwright can drive. Python 3 with
 `pillow` + `numpy` (`pip install -r requirements.txt`) only for the image compositors.
@@ -84,12 +99,19 @@ node scripts/add-music.sh out.mp4 track.mp3 final.mp4 -14
 ### Verifying
 
 ```bash
-node scripts/qa-take.js <clip.mp4>     # non-zero exit on FAIL
+node scripts/qa-take.js <clip.mp4>            # screen recording (default)
+node scripts/qa-take.js <clip.mp4> --plate    # POV / device-stage take
 ```
 
-Checks for frozen holds, static runs, edge gaps where a plate under-covers the frame, dead
-tails, and held empty screens. Every one of them exists because that defect actually shipped
-once. Run it before you look at the video, not after.
+Non-zero exit on FAIL. Checks for dead captures, frozen holds, edge gaps where a plate
+under-covers the frame, dead tails, and held empty screens. Every one exists because that
+defect actually shipped once. Run it before you look at the video, not after.
+
+**The two modes matter**, because "static" means opposite things. In a screen recording the
+app holds still while the viewer reads — that's the content. In a POV take the plate carries
+continuous hand-held drift, so *every* frame should differ, and a static run is the
+signature bug: a hold emitted as one long frame, which freezes the picture and makes the
+plate jump. Running the wrong mode gives you confident nonsense in both directions.
 
 ---
 
@@ -134,10 +156,15 @@ lib/                 config loader + the app-target abstraction
 scripts/             recording engines, cutting, QA, compositors
 templates/           device stage, card + caption renderers
 examples/            five worked recorders — copy one per flow
+demo-app/            a small fake app, so a fresh clone can record something
 skills/              the SKILL.md pack
 docs/                the recording guide
 .claude/skills/      the /feature-video pipeline skill
 ```
+
+`node scripts/check.js` is the repo self-check — syntax, local requires, doc path
+references, brand neutrality, secrets, config hygiene. It needs no ffmpeg and no browser, so
+it runs anywhere. It's what CI runs.
 
 ## Pointing it at your app
 

@@ -9,8 +9,10 @@
   },
   "scripts": {
     "bootstrap": "scripts/bootstrap.sh",
+    "demo": "node scripts/demo-app.js",
     "dev": "scripts/dev-server.sh",
-    "qa": "node scripts/qa-take.js"
+    "qa": "node scripts/qa-take.js",
+    "check": "node scripts/check.js"
   },
   "dependencies": {
     "playwright": "^1.48.0"

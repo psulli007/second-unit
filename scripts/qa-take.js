@@ -1,20 +1,39 @@
 // QA a recorded take before anyone watches it.
 //
-//   node scripts/qa-take.js final-4k-pov/pov-chat.mp4 [--json]
+//   node scripts/qa-take.js <video.mp4> [--plate] [--json]
 //
 // Every check here exists because the corresponding defect actually SHIPPED once, and in two
 // cases the reviewer had already convinced themselves it wasn't there. Reviewing a couple of
 // stills does not catch any of them.
 //
-// Tuned for RAW TAKES. On a finished cut that contains title/outro cards, expect `frozen` and
-// `dead-tail` WARNs for the cards themselves — those are intentional and not defects. The FAIL
-// checks (`motion`, `edge-gap`) stay meaningful on both.
+// ── TWO MODES, because "static" means opposite things ────────────────────────────────────
+//
+// SCREEN (default) — a plain screen recording. The app holds still while the viewer reads,
+//   so long static runs are the intended content. Only a clip that never moves at all, or
+//   stalls for a very long time, is a defect.
+//
+// PLATE (`--plate`) — a POV / device-stage take, where the plate carries continuous
+//   hand-held drift, so EVERY frame should differ. Here a static run is the signature bug:
+//   a hold emitted as one long frame instead of many, which freezes the picture solid and
+//   makes the plate jump between holds. That defect is invisible in stills and obvious in
+//   motion, which is exactly why it shipped once.
+//
+// Running the wrong mode gives you confident nonsense in both directions: `--plate` on a
+// screen recording fails every well-paced demo, and the default on a POV take waves through
+// the one bug it was written to catch.
+//
+// On a FINISHED CUT containing title/outro cards, expect `frozen` and `dead-tail` WARNs for
+// the cards themselves — intentional, not defects.
 const { execFileSync, execSync } = require('child_process');
 const fs = require('fs');
 
 const SRC = process.argv[2];
 const JSON_OUT = process.argv.includes('--json');
-if (!SRC || !fs.existsSync(SRC)) { console.error('usage: qa-take.js <video.mp4>'); process.exit(2); }
+const PLATE = process.argv.includes('--plate');
+if (!SRC || !fs.existsSync(SRC)) {
+  console.error('usage: qa-take.js <video.mp4> [--plate] [--json]');
+  process.exit(2);
+}
 
 const probe = (a) => execFileSync('ffprobe', ['-v', 'error', ...a, '-of', 'csv=p=0', SRC]).toString().trim();
 const dur = parseFloat(probe(['-show_entries', 'format=duration']).replace(/,$/, ''));
@@ -37,9 +56,12 @@ const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[s.len
 const findings = [];
 const add = (sev, check, detail) => findings.push({ sev, check, detail });
 
-// 1. FROZEN. A hold emitted as one long frame freezes the picture solid; with per-frame
-//    motion (hand-held drift) every frame should differ.
-const FROZE = 0.25, MINRUN = 1.5;
+// 1. FROZEN. In PLATE mode a hold emitted as one long frame freezes the picture solid, and
+//    since drift should make every frame differ, a 1.5s static run is a real defect. In
+//    SCREEN mode a static run is a hold — the thing you deliberately recorded — so only an
+//    unreasonably long stall counts.
+const FROZE = 0.25;
+const MINRUN = PLATE ? 1.5 : 4.0;
 let runs = [], i = 0;
 while (i < deltas.length) {
   if (deltas[i] < FROZE) {
@@ -49,8 +71,19 @@ while (i < deltas.length) {
   } else i++;
 }
 const med = median(deltas);
-if (med < 0.02) add('FAIL', 'motion', `median frame-to-frame delta ${med.toFixed(4)} — the clip is essentially a slideshow (holds emitted as single long frames?)`);
-runs.forEach(r => add(r.len >= 3 ? 'FAIL' : 'WARN', 'frozen', `${r.len}s static from ${r.at}s`));
+if (PLATE) {
+  // Drift means the median frame SHOULD differ from the last. If it doesn't, the timeline
+  // emitted holds as single long frames and the whole take is a slideshow.
+  if (med < 0.02) add('FAIL', 'motion', `median frame-to-frame delta ${med.toFixed(4)} — the clip is essentially a slideshow (holds emitted as single long frames?)`);
+  runs.forEach(r => add(r.len >= 3 ? 'FAIL' : 'WARN', 'frozen', `${r.len}s static from ${r.at}s`));
+} else {
+  // A screen recording only fails if NOTHING ever happens — a dead capture, a page that
+  // never loaded, a recorder whose interactions all silently no-oped.
+  const moved = deltas.filter(d => d >= FROZE).length;
+  if (moved === 0) add('FAIL', 'motion', 'nothing on screen ever changes — the capture is dead (page never loaded, or every interaction no-oped)');
+  else if (moved / deltas.length < 0.02) add('WARN', 'motion', `only ${(moved / deltas.length * 100).toFixed(1)}% of frames change — verify the flow actually ran`);
+  runs.forEach(r => add(r.len >= 8 ? 'FAIL' : 'WARN', 'frozen', `${r.len}s static from ${r.at}s`));
+}
 
 // 2. EDGE GAP. A drifting/scaled plate that under-covers the frame shows the stage's #000
 //    backdrop at the border. Test for TRUE black (<3): a dark plate (night scene, black
@@ -102,9 +135,9 @@ flatRuns.forEach(r => add('WARN', 'empty-screen', `${r.len}s of unusually flat/e
 
 const fails = findings.filter(f => f.sev === 'FAIL').length;
 if (JSON_OUT) {
-  console.log(JSON.stringify({ src: SRC, dur, size: [W, H], frames: N, fps: +fps.toFixed(2), medianDelta: +med.toFixed(4), findings }, null, 1));
+  console.log(JSON.stringify({ src: SRC, mode: PLATE ? 'plate' : 'screen', dur, size: [W, H], frames: N, fps: +fps.toFixed(2), medianDelta: +med.toFixed(4), findings }, null, 1));
 } else {
-  console.log(`${SRC}  ${W}x${H}  ${dur.toFixed(1)}s  ${N}f @${fps.toFixed(1)}  median-delta ${med.toFixed(3)}`);
+  console.log(`${SRC}  ${W}x${H}  ${dur.toFixed(1)}s  ${N}f @${fps.toFixed(1)}  median-delta ${med.toFixed(3)}  [${PLATE ? 'plate' : 'screen'} mode]`);
   if (!findings.length) console.log('  PASS — no issues found');
   for (const f of findings) console.log(`  ${f.sev.padEnd(4)} ${f.check.padEnd(13)} ${f.detail}`);
 }

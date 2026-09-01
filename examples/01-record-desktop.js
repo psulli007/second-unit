@@ -36,7 +36,7 @@ const OUT = path.join(process.cwd(), 'out', 'desktop');
   // ── Scene 1: the landing state ────────────────────────────────────────────
   // Wait for real content, never a fixed sleep. A sleep either films a spinner
   // or wastes three seconds, and which one you get depends on the network.
-  await page.waitForSelector('[data-testid="main-content"]', { timeout: 45000 });
+  await page.waitForSelector('[data-testid=main-content]', { timeout: 45000 });
   mark('landing');
 
   // Images that are still decoding read as a broken page on video. Wait for
@@ -58,14 +58,16 @@ const OUT = path.join(process.cwd(), 'out', 'desktop');
 
   // ── Scene 3: a real interaction ───────────────────────────────────────────
   mark('open-form');
-  await humanClick(page, page.getByRole('button', { name: 'Create' }));
-  await page.waitForSelector('[role="dialog"]', { timeout: 15000 });
+  await humanClick(page, page.getByTestId('create'));
+  // NB: `[role=dialog]` is an ATTRIBUTE selector — a native <dialog> has that role
+  // implicitly but carries no such attribute, so it would never match. Match the element.
+  await page.waitForSelector('dialog[open]', { timeout: 15000 });
   await page.waitForTimeout(1200);
 
   // Type with real key events at human speed. Filling a field instantly is the
   // single clearest "this is automated" tell in a product demo.
   mark('typing');
-  const input = page.getByRole('textbox').first();
+  const input = page.getByTestId('name');
   await input.click();
   await input.pressSequentially('A realistic value', { delay: 85 });
   await page.waitForTimeout(900);
@@ -75,8 +77,8 @@ const OUT = path.join(process.cwd(), 'out', 'desktop');
   // resolving, an answer streaming in — is the proof the footage is real, and
   // speeding it up in the edit is what makes a demo feel fake. Keep it at 1x.
   mark('submit');
-  await humanClick(page, page.getByRole('button', { name: 'Save' }));
-  await page.waitForSelector('[data-testid="result"]', { timeout: 30000 });
+  await humanClick(page, page.getByTestId('save'));
+  await page.waitForSelector('[data-testid=result]', { timeout: 30000 });
   mark('result');
   await page.waitForTimeout(3000);           // final hold — never end on a cut
 

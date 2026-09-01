@@ -1,0 +1,28 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # scripts/check.js deliberately needs no ffmpeg, no browser and no running app:
+      # syntax, local requires, doc path references, brand neutrality, secrets, config
+      # hygiene. It should pass on a bare checkout.
+      - name: Repo self-check
+        run: node scripts/check.js
+
+      - name: Shell syntax
+        run: for f in scripts/*.sh; do bash -n "$f"; done
+
+      - name: Python syntax
+        run: |
+          python3 -m compileall -q scripts/*.py

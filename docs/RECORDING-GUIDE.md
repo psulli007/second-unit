@@ -17,6 +17,9 @@ viewers who cannot say why, and the whole video pays for it.
 
 - `scripts/bootstrap.sh` once per machine, then `scripts/dev-server.sh` if you cloned an
   app into `app/`.
+- Not sure whether a problem is yours or the studio's? Run the same recorder against the
+  bundled demo app (`node scripts/demo-app.js`, then `node examples/01-record-desktop.js`).
+  It takes a minute and it splits the question cleanly.
 - `config.env` holds everything machine- or product-specific: `APP_URL`, the readiness gate,
   the CSS to hide, brand tokens, library path. No recorder should hardcode any of it.
 - Playwright + Chromium install at the repo root, so `require('playwright')` resolves from
@@ -53,9 +56,15 @@ what makes a take reproducible. Pace the scenes:
 **3. VERIFY.** Run the automated gate first, then look:
 
 ```bash
-node scripts/qa-take.js out/desktop/take.mp4
+node scripts/qa-take.js out/desktop/take.mp4           # screen recording
+node scripts/qa-take.js out/pov/take.mp4 --plate       # POV / device-stage take
 ffmpeg -i out/desktop/take.mp4 -vf fps=1/4 out/frames/f_%02d.png
 ```
+
+Pass `--plate` for anything filmed on a device stage or a POV plate. Those takes carry
+continuous hand-held drift, so every frame should differ and a 1.5 s static run is a real
+defect; a plain screen recording holds still on purpose and would fail that check on every
+well-paced demo.
 
 Read the frames. Every check in `qa-take.js` exists because that defect actually shipped
 once — twice after the reviewer had convinced themselves it wasn't there. Reviewing a couple

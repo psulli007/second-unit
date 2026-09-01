@@ -26,7 +26,7 @@ composited, nothing is tracked, and no AI ever touches the interface.
 3  python3 scripts/autocal.py <plate.png> [layoutw]     # closes the loop on the render
 4  node scripts/probe-stage.js <plate.png> <chrome> <device> /tmp/x.png [layoutw]   # ONE still
 5  node examples/05-record-device-stage.js phone | laptop   # your own copy, per flow
-6  node scripts/qa-take.js out/pov/<clip>.mp4              # must pass before anyone watches
+6  node scripts/qa-take.js out/pov/<clip>.mp4 --plate      # must pass before anyone watches
 7  import to Photos + review on a real phone
 ```
 
@@ -38,7 +38,7 @@ error shows up in the still first.
 ```
 node examples/05-record-device-stage.js phone   # copy per flow; set frame/meas/bg in the file
 node examples/05-record-device-stage.js laptop  # laptop wants pose ~1.7
-node scripts/qa-take.js out/pov/<clip>.mp4
+node scripts/qa-take.js out/pov/<clip>.mp4 --plate
 node scripts/calibrate.js <plate.png> [layoutw] # manual 4-corner fallback, with a 6x loupe
 ```
 
@@ -104,7 +104,10 @@ All of these are in the recorders; port them to any new flow.
 
 ## The QA gate
 
-`node scripts/qa-take.js <clip>` — non-zero exit on FAIL. Every check exists because that
+`node scripts/qa-take.js <clip> --plate` — non-zero exit on FAIL. **The `--plate` flag is
+not optional here.** Without it the gate runs in screen-recording mode, where static runs are
+expected content — and it will wave through the exact slideshow bug the `motion` check exists
+to catch. Every check exists because that
 defect actually shipped once, and twice I had convinced myself it wasn't there.
 
 | Check | Catches |

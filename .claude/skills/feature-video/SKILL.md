@@ -33,7 +33,8 @@ which formats (default: demo + highlight; vertical/square on request).
    - `05-record-device-stage.js` — the app live on a photoreal device.
    Print a `MARK` at every beat. Real typing, 2–3 s holds.
 
-5. **Verify.** `node scripts/qa-take.js <clip>` must pass, THEN extract frames
+5. **Verify.** `node scripts/qa-take.js <clip>` must pass (add `--plate` for device-stage
+   or POV takes), THEN extract frames
    (`ffmpeg -vf fps=1/4`) and read them. Re-record on stuck spinners or dead time; max two
    retries, then report the blocker honestly.
 
