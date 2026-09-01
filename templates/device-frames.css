@@ -1,0 +1,213 @@
+/* ============================================================================
+   Photoreal CSS device frames, built from real device proportions.
+
+   PHONE — iPhone 16 Pro: body 149.6x71.5mm, screen 402x874pt (0.460 aspect),
+   bezel ~1.8mm uniform (2.6% of body width), body corner radius ~11.5mm (16% of
+   body width), screen radius = body radius - bezel. Flat titanium sides with a
+   bright chamfer where the side meets the front glass; Dynamic Island ~31% of
+   screen width; Action + volume buttons left, Side button right.
+
+   LAPTOP — MacBook Pro: display 16:10, thin dark bezel with the notch cut into
+   the DISPLAY (not the lid edge), rounded display corners, aluminium lid with a
+   chamfered edge, tapered base with a foot shadow.
+
+   Everything is driven off --screen-w so a frame scales to any resolution.
+   Set --screen-w (px) and the rest derives.
+   ============================================================================ */
+
+/* ---------------------------------- PHONE --------------------------------- */
+.dv-phone {
+  --screen-w: 1080px;
+  --screen-h: calc(var(--screen-w) / 0.460);
+  --bezel: calc(var(--screen-w) * 0.0278);          /* ~1.8mm */
+  --body-w: calc(var(--screen-w) + var(--bezel) * 2);
+  --r-body: calc(var(--body-w) * 0.175);            /* modern squircle */
+  --r-screen: calc(var(--r-body) - var(--bezel));
+
+  position: relative;
+  width: var(--body-w);
+  padding: var(--bezel);
+  border-radius: var(--r-body);
+  /* natural titanium: light, luminous metal. Brightest where the band faces the
+     key light (upper-left), rolling to a deep shadow on the opposite side. */
+  background:
+    conic-gradient(from 202deg at 50% 50%,
+      #cfd2d6  0deg, #9ba0a7  30deg, #6e737b  68deg, #9aa0a8 104deg,
+      #d8dbe0 148deg, #a8adb4 186deg, #767b83 226deg, #b3b8bf 272deg,
+      #e2e5e9 312deg, #aeb3ba 340deg, #cfd2d6 360deg);
+  box-shadow:
+    /* crisp chamfer where the flat side meets the front glass */
+    inset 0 0 0 1px rgba(255,255,255,.92),
+    inset 0 0 0 2.5px rgba(255,255,255,.30),
+    /* the metal rolls off toward the glass */
+    inset 0 1.5px 3px rgba(255,255,255,.55),
+    inset 0 -1.5px 4px rgba(0,0,0,.30),
+    /* dark outer edge separating the phone from the world */
+    0 0 0 1.5px rgba(28,30,34,.85);
+}
+/* brushed anisotropy — very fine, and only a whisper */
+.dv-phone::before {
+  content: ''; position: absolute; inset: 0; z-index: 0;
+  border-radius: inherit; pointer-events: none;
+  background: repeating-linear-gradient(92deg,
+    rgba(255,255,255,.05) 0 1px, rgba(0,0,0,.028) 1px 2.5px);
+  mix-blend-mode: overlay;
+}
+/* a soft specular sweep along the metal, so it reads polished not painted */
+.dv-phone::after {
+  content: ''; position: absolute; inset: 0; z-index: 0;
+  border-radius: inherit; pointer-events: none;
+  background: linear-gradient(118deg,
+    rgba(255,255,255,.40) 0%, rgba(255,255,255,0) 18%,
+    rgba(255,255,255,0) 62%, rgba(255,255,255,.22) 82%, rgba(255,255,255,0) 100%);
+}
+
+/* the glass panel */
+.dv-phone .dv-glass {
+  position: relative; overflow: hidden; z-index: 2;
+  width: var(--screen-w); height: var(--screen-h);
+  border-radius: var(--r-screen);
+  background: #000;
+  /* the black mask between glass edge and active pixels + inner glass depth */
+  box-shadow:
+    inset 0 0 0 calc(var(--screen-w) * 0.0028) #000,
+    inset 0 0 calc(var(--screen-w) * 0.03) rgba(0,0,0,.55);
+}
+/* Dynamic Island: ~31% of screen width, ~4.2% of screen height */
+.dv-phone .dv-island {
+  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%);
+  top: calc(var(--screen-h) * 0.0128);
+  width: calc(var(--screen-w) * 0.310);
+  height: calc(var(--screen-h) * 0.0424);
+  border-radius: 999px;
+  background: #000;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+/* buttons: same titanium as the frame, barely protruding — from the front you
+   mostly see a sliver of the button's own chamfer, not a floating dark tab */
+.dv-phone .dv-btn {
+  position: absolute; z-index: 1;
+  background: linear-gradient(180deg, #dfe2e6 0%, #b6bbc2 30%, #8d939b 70%, #6b7078 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.85),
+    inset 0 -1px 0 rgba(0,0,0,.25),
+    0 0 0 .75px rgba(40,43,48,.55);
+  pointer-events: none;
+}
+.dv-phone .dv-btn.left  { left: calc(var(--bezel) * -0.40); width: calc(var(--bezel) * 0.40); border-radius: 2px 0 0 2px; }
+.dv-phone .dv-btn.right { right: calc(var(--bezel) * -0.40); width: calc(var(--bezel) * 0.40); border-radius: 0 2px 2px 0; }
+.dv-phone .dv-btn.action { top: calc(var(--screen-h) * 0.150); height: calc(var(--screen-h) * 0.038); }
+.dv-phone .dv-btn.volup  { top: calc(var(--screen-h) * 0.222); height: calc(var(--screen-h) * 0.058); }
+.dv-phone .dv-btn.voldn  { top: calc(var(--screen-h) * 0.294); height: calc(var(--screen-h) * 0.058); }
+.dv-phone .dv-btn.side   { top: calc(var(--screen-h) * 0.232); height: calc(var(--screen-h) * 0.084); }
+
+/* --------------------------------- LAPTOP --------------------------------- */
+.dv-laptop {
+  --screen-w: 2400px;
+  --screen-h: calc(var(--screen-w) / 1.60);         /* 16:10 */
+  --bezel: calc(var(--screen-w) * 0.0092);          /* thin dark bezel */
+  --lid-pad: calc(var(--screen-w) * 0.0125);
+  position: relative;
+  width: calc(var(--screen-w) + (var(--bezel) + var(--lid-pad)) * 2);
+}
+.dv-laptop .dv-lid {
+  position: relative;
+  padding: var(--lid-pad);
+  padding-bottom: calc(var(--lid-pad) * 2.6);       /* chin */
+  border-radius: calc(var(--screen-w) * 0.0125) calc(var(--screen-w) * 0.0125) calc(var(--screen-w) * 0.0033) calc(var(--screen-w) * 0.0033);
+  /* aluminium lid, brighter along the top edge */
+  background:
+    linear-gradient(180deg, #e6e7ea 0%, #cdcfd4 3%, #b7bac1 22%, #aaadb4 62%, #c4c7cc 100%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,.85),          /* top chamfer */
+    inset 0 0 0 1px rgba(255,255,255,.35),
+    inset 0 -2px 5px rgba(0,0,0,.22),
+    0 0 0 1px rgba(0,0,0,.30);
+}
+.dv-laptop .dv-inner {                              /* black glass surround */
+  padding: var(--bezel);
+  border-radius: calc(var(--screen-w) * 0.0075);
+  background: #0a0a0c;
+  box-shadow: inset 0 0 calc(var(--screen-w) * 0.008) rgba(0,0,0,.95);
+}
+.dv-laptop .dv-glass {
+  position: relative; overflow: hidden;
+  width: var(--screen-w); height: var(--screen-h);
+  border-radius: calc(var(--screen-w) * 0.0046);
+  background: #000;
+}
+/* notch cut into the DISPLAY, like a real MacBook Pro */
+.dv-laptop .dv-notch {
+  position: absolute; z-index: 6; top: 0; left: 50%; transform: translateX(-50%);
+  width: calc(var(--screen-w) * 0.098);
+  height: calc(var(--screen-h) * 0.030);
+  border-radius: 0 0 calc(var(--screen-w) * 0.005) calc(var(--screen-w) * 0.005);
+  background: #0a0a0c;
+}
+.dv-laptop .dv-cam {
+  position: absolute; z-index: 7; top: calc(var(--screen-h) * 0.011); left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--screen-w) * 0.0033); height: calc(var(--screen-w) * 0.0033);
+  border-radius: 50%; background: #17171b;
+  box-shadow: inset 0 0 2px rgba(120,150,180,.4);
+}
+.dv-laptop .dv-chin {
+  position: absolute; bottom: calc(var(--lid-pad) * 0.75); left: 50%;
+  transform: translateX(-50%);
+  color: rgba(96,98,104,.9);
+  font: 600 calc(var(--screen-w) * 0.0075)/1 -apple-system, "Helvetica Neue", sans-serif;
+  letter-spacing: .22em;
+}
+/* base: tapered, with the hinge shadow and a contact shadow under the feet */
+.dv-laptop .dv-base {
+  position: relative;
+  height: calc(var(--screen-w) * 0.0175);
+  margin: 0 calc(var(--screen-w) * -0.031);
+  border-radius: 0 0 calc(var(--screen-w) * 0.011) calc(var(--screen-w) * 0.011);
+  background: linear-gradient(180deg, #cbced3 0%, #b0b3ba 40%, #969aa1 78%, #7e828a 100%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,.8),
+    0 calc(var(--screen-w) * 0.008) calc(var(--screen-w) * 0.016) calc(var(--screen-w) * -0.005) rgba(0,0,0,.6);
+}
+/* the notch in the base front edge where you lift the lid */
+.dv-laptop .dv-lip {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: calc(var(--screen-w) * 0.075); height: calc(var(--screen-w) * 0.0042);
+  border-radius: 0 0 calc(var(--screen-w) * 0.004) calc(var(--screen-w) * 0.004);
+  background: rgba(120,124,132,.85);
+}
+
+/* ------------------------- shared glass treatment ------------------------- */
+/* the screen's own light, thrown onto the frame and the room */
+.dv-glow {
+  position: absolute; z-index: -1; inset: -12% -12% -16%;
+  background: radial-gradient(ellipse at 50% 40%,
+    rgba(255,247,234,.30) 0%, rgba(255,241,222,.14) 44%, rgba(255,236,212,0) 74%);
+  filter: blur(30px); pointer-events: none;
+}
+/* contact shadow on the surface below */
+.dv-contact {
+  position: absolute; z-index: -2; left: 6%; right: 6%; bottom: -4%; height: 7%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,.52) 0%, rgba(0,0,0,0) 72%);
+  filter: blur(18px); pointer-events: none;
+}
+/* a real screen is never perfectly matte: a broad, very soft sheen across the glass */
+.dv-sheen {
+  position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  background: linear-gradient(114deg,
+    rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 24%,
+    rgba(255,255,255,0) 44%, rgba(255,255,255,0) 100%);
+}
+/* the glass edge picks up a hairline of light where it curves into the frame */
+.dv-edge {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.10),
+    inset 0 1px 1px rgba(255,255,255,.16);
+}
+/* panel depth into the bezel */
+.dv-vig {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  box-shadow: inset 0 0 calc(var(--screen-w) * 0.022) rgba(0,0,0,.14);
+}

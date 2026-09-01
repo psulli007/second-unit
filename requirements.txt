@@ -1,0 +1,7 @@
+# Optional — only needed for the Python image/screen compositors in scripts/:
+#   screenlib.py, screen-comp.py, screen-comp-video.py, frame-cutout.py,
+#   measure-frame.py, autocal.py
+#
+#   pip install -r requirements.txt
+numpy>=1.24
+Pillow>=10.0

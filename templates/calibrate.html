@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>screen calibrator</title>
+<style>
+  /* Drag the four screen corners by eye and save them.
+     Inferring the quad from the plate is guesswork: in these renders the screen is black and
+     so are the bezel, the body, the shadow and the feathers, so "where the screen ends" moves
+     10-30px with the threshold — and a rounded screen's true corners are not in the mask at
+     all. The eye is the ground truth we were approximating, so use it directly. */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #14120f; color: #ece5dc;
+               font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  #wrap { position: fixed; inset: 0 0 62px 0; display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; }
+  #plate { display: block; max-width: 100%; max-height: 100%; }
+  #screen { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
+  #screen iframe { border: 0; display: block; transform-origin: 0 0; background: #fff; }
+  #edges { position: absolute; inset: 0; pointer-events: none; }
+  .h { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+       background: rgba(255,60,60,.30); border: 2px solid #ff4d4d; cursor: grab; }
+  .h.sel { background: rgba(80,255,140,.35); border-color: #52ff8c; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 62px; background: #1d1917;
+         border-top: 1px solid #322b26; display: flex; align-items: center; gap: 14px; padding: 0 16px; }
+  button { background: #2a2422; color: #ece5dc; border: 1px solid #3d3531; border-radius: 4px;
+           padding: 7px 13px; font: inherit; cursor: pointer; }
+  button:hover { background: #342d2a; }
+  button.go { background: #cf7a3c; border-color: #cf7a3c; color: #17120e; font-weight: 600; }
+  #msg { margin-left: auto; color: #b6a99c; font-variant-numeric: tabular-nums; }
+  kbd { background: #2a2422; border: 1px solid #3d3531; border-radius: 3px; padding: 1px 5px; font-size: 11px; }
+  #loupe { position: fixed; right: 14px; top: 14px; width: 240px; height: 240px; border: 1px solid #3d3531;
+           border-radius: 4px; background: #000 no-repeat; display: none; image-rendering: pixelated; }
+  #loupe.on { display: block; }
+  #loupe::after { content: ''; position: absolute; inset: 0;
+    background: linear-gradient(#52ff8c,#52ff8c) 50% 0/1px 100% no-repeat,
+                linear-gradient(#52ff8c,#52ff8c) 0 50%/100% 1px no-repeat; opacity: .55; }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage">
+  <img id="plate" alt="device plate">
+  <div id="screen"><iframe id="ui"></iframe></div>
+  <svg id="edges"><polygon points="" fill="none" stroke="#52ff8c" stroke-width="1.5" stroke-dasharray="6 5"/></svg>
+</div></div>
+<div id="loupe"></div>
+<div id="bar">
+  <button id="toggle">Hide UI</button>
+  <button id="lp">Loupe: on</button>
+  <span>drag corners &middot; <kbd>click</kbd> a corner then <kbd>&larr;&uarr;&rarr;&darr;</kbd> to nudge, <kbd>shift</kbd> = 10px</span>
+  <button class="go" id="save">Save quad</button>
+  <span id="msg"></span>
+</div>
+<script>
+const Q = new URLSearchParams(location.search);
+const PLATE = Q.get('plate');                 // repo-relative png
+const WIDGET = Q.get('widget') || 'http://localhost:5173';
+const LAYOUT_W = parseFloat(Q.get('layoutw') || '402');
+const plate = document.getElementById('plate');
+const stage = document.getElementById('stage');
+const scr = document.getElementById('screen');
+const ui = document.getElementById('ui');
+const poly = document.querySelector('#edges polygon');
+const msg = document.getElementById('msg');
+const loupe = document.getElementById('loupe');
+let quad = null;            // [[x%,y%] x4] tl,tr,br,bl
+let NW = 0, NH = 0, scale = 1, sel = -1, showUI = true, loupeOn = true;
+
+function homographyMatrix3d(w, h, dst) {
+  const src = [[0,0],[w,0],[w,h],[0,h]];
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [X, Y] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -X*x, -X*y]); b.push(X);
+    A.push([0, 0, 0, x, y, 1, -Y*x, -Y*y]); b.push(Y);
+  }
+  for (let c = 0; c < 8; c++) {
+    let p = c;
+    for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    const d = A[c][c] || 1e-12;
+    for (let r = 0; r < 8; r++) {
+      if (r === c) continue;
+      const f = A[r][c] / d;
+      for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k];
+      b[r] -= f * b[c];
+    }
+  }
+  const v = A.map((row, i) => b[i] / (row[i] || 1e-12));
+  const [a,bb,c0,d0,e,f,g,i2] = v;
+  return `matrix3d(${a},${d0},0,${g}, ${bb},${e},0,${i2}, 0,0,1,0, ${c0},${f},0,1)`;
+}
+
+function render() {
+  const pts = quad.map(([x, y]) => [x / 100 * NW * scale, y / 100 * NH * scale]);
+  const el = (a, b) => Math.hypot(pts[b][0]-pts[a][0], pts[b][1]-pts[a][1]);
+  const sw = (el(0,1) + el(3,2)) / 2, sh = (el(0,3) + el(1,2)) / 2;
+  scr.style.width = sw + 'px'; scr.style.height = sh + 'px';
+  scr.style.transform = homographyMatrix3d(sw, sh, pts);
+  scr.style.display = showUI ? 'block' : 'none';
+  const k = sw / LAYOUT_W;
+  ui.style.width = LAYOUT_W + 'px'; ui.style.height = (sh / k) + 'px';
+  ui.style.transform = `scale(${k})`;
+  poly.setAttribute('points', pts.map(p => p.join(',')).join(' '));
+  document.querySelectorAll('.h').forEach((h, i) => {
+    h.style.left = pts[i][0] + 'px'; h.style.top = pts[i][1] + 'px';
+    h.classList.toggle('sel', i === sel);
+  });
+  msg.textContent = quad.map(([x,y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('  ');
+}
+
+function showLoupe(i) {
+  if (!loupeOn || i < 0) { loupe.classList.remove('on'); return; }
+  const Z = 6, S = 240;
+  const px = quad[i][0] / 100 * NW, py = quad[i][1] / 100 * NH;
+  loupe.classList.add('on');
+  loupe.style.backgroundImage = `url("${plate.src}")`;
+  loupe.style.backgroundSize = (NW * Z) + 'px ' + (NH * Z) + 'px';
+  loupe.style.backgroundPosition = `${S/2 - px*Z}px ${S/2 - py*Z}px`;
+}
+
+fetch('/quad?plate=' + encodeURIComponent(PLATE)).then(r => r.json()).then(j => {
+  quad = j.quad_pct.map(p => p.slice());
+  plate.src = '/' + PLATE;
+  plate.onload = () => {
+    NW = plate.naturalWidth; NH = plate.naturalHeight;
+    const fit = Math.min((innerWidth - 60) / NW, (innerHeight - 130) / NH);
+    scale = fit;
+    plate.style.width = (NW * scale) + 'px';
+    stage.style.width = (NW * scale) + 'px'; stage.style.height = (NH * scale) + 'px';
+    document.getElementById('edges').setAttribute('width', NW * scale);
+    document.getElementById('edges').setAttribute('height', NH * scale);
+    for (let i = 0; i < 4; i++) {
+      const h = document.createElement('div'); h.className = 'h'; h.dataset.i = i;
+      stage.appendChild(h);
+      h.addEventListener('pointerdown', ev => {
+        ev.preventDefault(); sel = i; h.setPointerCapture(ev.pointerId);
+        const move = e => {
+          const r = plate.getBoundingClientRect();
+          quad[i][0] = (e.clientX - r.left) / scale / NW * 100;
+          quad[i][1] = (e.clientY - r.top) / scale / NH * 100;
+          render(); showLoupe(i);
+        };
+        const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); };
+        h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+      });
+    }
+    ui.src = WIDGET;
+    render();
+  };
+});
+
+addEventListener('keydown', e => {
+  if (sel < 0) return;
+  const d = { ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1] }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  const step = e.shiftKey ? 10 : 1;
+  quad[sel][0] += d[0] * step / NW * 100;
+  quad[sel][1] += d[1] * step / NH * 100;
+  render(); showLoupe(sel);
+});
+document.getElementById('toggle').onclick = e => {
+  showUI = !showUI; e.target.textContent = showUI ? 'Hide UI' : 'Show UI'; render();
+};
+document.getElementById('lp').onclick = e => {
+  loupeOn = !loupeOn; e.target.textContent = 'Loupe: ' + (loupeOn ? 'on' : 'off'); showLoupe(sel);
+};
+document.getElementById('save').onclick = () => {
+  fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plate: PLATE, quad_pct: quad.map(p => [ +p[0].toFixed(4), +p[1].toFixed(4) ]) }) })
+    .then(r => r.text()).then(t => { msg.textContent = t; });
+};
+</script>
+</body>
+</html>

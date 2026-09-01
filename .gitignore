@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────
+# This repo is the SOURCE that makes the videos. It is not the videos.
+#
+# Everything ignored below is regenerable by running what IS committed.
+# Finished masters belong in object storage or an external backup, not in
+# git — a few dozen 4K takes will make a repo unusable.
+# ─────────────────────────────────────────────────────────────
+
+# Per-machine config (copy config.example.env -> config.env)
+config.env
+app.config.js
+
+# App checkout + deps
+app/
+node_modules/
+package-lock.json
+dev-server.log
+
+# Rendered output (regenerable — see examples/ and scripts/)
+out/
+build/
+library/
+cards/
+captions/
+
+# Intermediate frame dumps
+**/frames/
+**/verify_frames/
+
+# Large binaries
+*.mp4
+*.mov
+*.webm
+*.wav
+*.mp3
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/

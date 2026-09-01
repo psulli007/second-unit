@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>frame test</title>
+<link rel="stylesheet" href="device-frames.css">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #26262a; display: flex; gap: 90px; align-items: center;
+         justify-content: center; min-height: 100vh; padding: 70px; font-family: -apple-system, sans-serif; }
+  .wrap { position: relative; }
+  /* screen stand-in: a light panel so we judge the FRAME, not the UI */
+  .fill { position: absolute; inset: 0; background: linear-gradient(160deg,#fdfdfb,#f1efe9); }
+  .dv-phone  { --screen-w: 520px; }
+  .dv-laptop { --screen-w: 1180px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="dv-phone">
+      <div class="dv-glow"></div><div class="dv-contact"></div>
+      <span class="dv-btn left action"></span>
+      <span class="dv-btn left volup"></span>
+      <span class="dv-btn left voldn"></span>
+      <span class="dv-btn right side"></span>
+      <div class="dv-glass">
+        <div class="fill"></div>
+        <div class="dv-island"></div>
+        <div class="dv-vig"></div><div class="dv-sheen"></div><div class="dv-edge"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="dv-laptop">
+      <div class="dv-glow"></div><div class="dv-contact"></div>
+      <div class="dv-lid">
+        <div class="dv-inner">
+          <div class="dv-glass">
+            <div class="fill"></div>
+            <div class="dv-notch"></div><div class="dv-cam"></div>
+            <div class="dv-vig"></div><div class="dv-sheen"></div><div class="dv-edge"></div>
+          </div>
+        </div>
+        <div class="dv-chin"></div>
+      </div>
+      <div class="dv-base"><span class="dv-lip"></span></div>
+    </div>
+  </div>
+</body>
+</html>

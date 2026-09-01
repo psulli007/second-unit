@@ -1,0 +1,497 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>device stage</title>
+<style>
+  /* Device stage — the LIVE widget shown inside a device, RENDERED not composited.
+     Two frame sources:
+       frame=<url>   a PHOTOREAL device photo whose screen is switched OFF (black). The
+                     live iframe is positioned exactly in the measured screen rect on top,
+                     so you get photographic metal + a pixel-perfect rendered screen. This
+                     is the preferred mode — CSS can't match real brushed titanium.
+       (omitted)     fall back to the CSS-drawn frame in device-frames.css
+     Screen rect comes from scripts/measure-frame.py (percentages, so it scales freely).
+
+     Params: device=phone|laptop  frame=<url>  rect=l,t,w,h (%)  rad=<% of screen w>
+             bg=<url|css>  tilt=<deg>  widget=<url>  scale=<n>
+  */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0d0f; }
+
+  #bg { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; }
+  #bg::after {                       /* scrim so a photographic bg reads as depth */
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 34%, rgba(18,13,8,.44) 100%);
+  }
+
+  #stage { position: fixed; inset: 0; z-index: 1; display: flex;
+           align-items: center; justify-content: center; perspective: 2800px; }
+
+  /* ---- photoreal frame mode ---- */
+  .photo { position: relative; transform-style: preserve-3d; }
+  .photo > img { display: block; height: auto; }
+  /* the screen: live iframe clipped to the measured rect */
+  .photo .screen {
+    position: absolute; overflow: hidden; background: #fff;
+    /* rect + radius injected inline from the measurement */
+  }
+  .photo .screen iframe { display: block; border: 0; background: #fff; }
+
+  /* the screen's own light thrown onto the frame and the room — the thing that makes a
+     lit screen read as lit rather than pasted */
+  .glow {
+    position: absolute; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%,
+      rgba(255,247,235,.30) 0%, rgba(255,241,224,.13) 46%, rgba(255,236,214,0) 76%);
+    filter: blur(34px);
+  }
+  /* glass treatment over the screen */
+  .sheen {
+    position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background: linear-gradient(114deg,
+      rgba(255,255,255,.085) 0%, rgba(255,255,255,.032) 25%,
+      rgba(255,255,255,0) 45%, rgba(255,255,255,0) 100%);
+  }
+  .vig {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    box-shadow: inset 0 0 42px rgba(0,0,0,.14);
+  }
+
+  /* ---- iOS chrome (chrome=safari) --------------------------------------------------
+     Without this the app is a bare full-bleed page with its own X button: it reads as
+     neither a native app nor a website, which is a large part of the "off" feeling. The
+     status bar + Safari URL bar say "this is a phone, on a website" instantly, and they
+     make the widget's modal-with-an-X framing make sense.
+     All sizes are in iOS POINTS at the layout width, so they scale with the screen.  */
+  .ios { position: absolute; inset: 0; display: flex; flex-direction: column;
+         background: #000; overflow: hidden;
+         font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .ios .status {
+    position: relative; flex: 0 0 auto; height: 54px; color: #000;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 32px 0; font-size: 17px; font-weight: 600; letter-spacing: .2px;
+    background: #fff; z-index: 4;
+  }
+  .ios .status .icons { display: flex; align-items: center; gap: 6px; }
+  /* the Dynamic Island must OCCLUDE the page, not sit under it */
+  .ios .island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 125px; height: 36px; border-radius: 18px; background: #000; z-index: 6;
+  }
+  .ios .web { position: relative; flex: 1 1 auto; overflow: hidden; background: #fff; }
+  .ios .web iframe { display: block; border: 0; background: #fff; }
+  /* iOS 17+ Safari puts the address bar at the BOTTOM */
+  .ios .safari {
+    flex: 0 0 auto; background: #f7f7f8; border-top: .5px solid rgba(0,0,0,.16);
+    padding: 8px 0 0; z-index: 4;
+  }
+  .ios .urlrow { display: flex; justify-content: center; padding: 0 14px; }
+  .ios .pill {
+    width: 100%; height: 40px; border-radius: 12px; background: #e6e6e9;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-size: 15px; color: #1c1c1e;
+  }
+  .ios .pill .aa { position: absolute; left: 26px; font-size: 15px; color: #4a4a4f; }
+  .ios .toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 30px 4px; color: #007aff;
+  }
+  .ios .toolbar svg { width: 22px; height: 22px; fill: none; stroke: #007aff; stroke-width: 1.8; }
+  .ios .home {
+    height: 22px; display: flex; align-items: center; justify-content: center;
+  }
+  .ios .home i { display: block; width: 140px; height: 5px; border-radius: 3px; background: #000; opacity: .85; }
+
+  /* ---- macOS chrome (chrome=macos) -------------------------------------------------
+     The laptop equivalent of the Safari bars. A bare full-bleed page on a laptop screen
+     reads wrong exactly as it did on the phone: menu bar + Safari window frame is what
+     says "a real Mac, on a real website".
+     Sizes are macOS POINTS at LAYOUT_W (1512 = 14" MacBook Pro default scaled width).  */
+  .mac { position: absolute; inset: 0; display: flex; flex-direction: column;
+         background: #1c1c1e; overflow: hidden;
+         font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .mac .menubar {
+    position: relative; flex: 0 0 auto; height: 37px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 18px; color: #fff; font-size: 13.5px;
+    background: rgba(28,28,30,.72); backdrop-filter: blur(20px); z-index: 5;
+  }
+  .mac .menubar .left, .mac .menubar .right { display: flex; align-items: center; gap: 17px; }
+  .mac .menubar .app { font-weight: 700; }
+  /* the notch is part of the menu bar and must OCCLUDE it */
+  .mac .notch {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 160px; height: 37px; background: #000; border-radius: 0 0 10px 10px; z-index: 7;
+  }
+  .mac .win { flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden;
+              background: #f6f6f7; }
+  .mac .toolbar {
+    flex: 0 0 auto; height: 52px; display: flex; align-items: center; gap: 14px;
+    padding: 0 16px; background: #e9e9ec; border-bottom: .5px solid rgba(0,0,0,.12);
+  }
+  .mac .lights { display: flex; gap: 8px; }
+  .mac .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .mac .urlbar {
+    flex: 1 1 auto; height: 30px; border-radius: 7px; background: #dededf;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-size: 13px; color: #26262a; margin: 0 90px;
+  }
+  .mac .tabbar {
+    flex: 0 0 auto; height: 36px; display: flex; align-items: stretch; gap: 1px;
+    padding: 0 12px 0 12px; background: #e9e9ec; border-bottom: .5px solid rgba(0,0,0,.10);
+  }
+  .mac .tab {
+    display: flex; align-items: center; gap: 7px; padding: 0 16px; font-size: 12.5px;
+    color: #1c1c1e; background: #f6f6f7; border-radius: 8px 8px 0 0; margin-top: 4px;
+    max-width: 260px; white-space: nowrap; overflow: hidden;
+  }
+  .mac .tab.dim { background: transparent; color: #6b6b70; }
+  .mac .web { flex: 1 1 auto; position: relative; overflow: hidden; background: #fff; }
+  .mac .web iframe { display: block; border: 0; background: #fff; }
+  .mac .toolbar svg, .mac .tabbar svg { width: 16px; height: 16px; fill: none; stroke: #46464a; stroke-width: 1.7; }
+
+  /* warm cast: the screen is neutral-cool, the kitchen is golden. Without this the screen
+     looks like a separate photograph pasted into the scene. */
+  .warm {
+    position: absolute; inset: 0; z-index: 5; pointer-events: none;
+    background: linear-gradient(160deg, rgba(255,214,150,.16) 0%, rgba(255,196,120,.07) 55%, rgba(120,150,255,.05) 100%);
+    mix-blend-mode: multiply;
+  }
+  /* the screen's light spilling OUT onto the wing/room. In quad mode the plate is opaque,
+     so a glow layered *behind* it does literally nothing — this one sits on top. */
+  .spill {
+    position: absolute; z-index: 4; pointer-events: none; mix-blend-mode: screen;
+    background: radial-gradient(ellipse at 50% 50%,
+      rgba(255,246,232,.30) 0%, rgba(255,240,216,.14) 42%, rgba(255,236,210,0) 72%);
+    filter: blur(46px);
+  }
+</style>
+<link rel="stylesheet" href="device-frames.css">
+</head>
+<body>
+<div id="bg"></div>
+<div id="stage"></div>
+
+<script>
+const Q = new URLSearchParams(location.search);
+const DEVICE = Q.get('device') || 'phone';
+const FRAME  = Q.get('frame');                       // photoreal frame url
+const RECT   = (Q.get('rect') || '').split(',').map(Number);   // l,t,w,h in %
+// quad mode: 8 numbers (tl,tr,br,bl as x,y pairs, in % of image). Use when the screen is
+// NOT a clean rectangle — e.g. a hand-held phone in a POV shot. A rect placement would be
+// visibly misaligned; a homography (CSS matrix3d) fits the screen exactly.
+const QUAD   = (Q.get('quad') || '').split(',').filter(v=>v!=='').map(Number);
+const RAD    = parseFloat(Q.get('rad') || '13');     // % of screen width
+const TILT   = parseFloat(Q.get('tilt') || '0');
+const BG     = Q.get('bg') || '#141210';
+const APPSRC = Q.get('src') || Q.get('widget') || 'http://localhost:5173';  // the live app the screen shows
+// The widget must LAY OUT at a proven CSS width (540 phone / 1200 laptop) and then be
+// scaled to fill the screen rect. Driving it off a fixed scale instead makes the layout
+// width depend on the frame's pixel size, which silently clips content.
+// 402 = iPhone 16 Pro logical width. Filming at 540 made every card ~34% too small for the
+// screen, which reads as a shrunken desktop page rather than a phone. The app's mobile tab
+// strip is horizontally SCROLLABLE below 540, so a tab cut off at the edge here is normal
+// iOS behaviour, not a layout bug.
+// 1512 = 14" MacBook Pro default scaled width (its screen is 1512x982pt, aspect 1.539 —
+// NOT 16:10; the notch adds height, and 16:10 is only the area below it).
+const LAYOUT_W = parseFloat(Q.get('layoutw') || (DEVICE === 'phone' ? '402' : '1512'));
+const CHROME   = Q.get('chrome') || 'none';          // 'safari' draws iOS status + URL bars
+const TIME     = Q.get('time') || '9:41';
+const URLTEXT  = Q.get('url') || 'example.com';
+
+const bg = document.getElementById('bg');
+bg.style.background = /^https?:|^\//.test(BG) ? `url("${BG}") center/cover no-repeat` : BG;
+
+const stage = document.getElementById('stage');
+
+function makeIframe(wPx, hPx) {
+  const k = wPx / LAYOUT_W;                 // scale so LAYOUT_W css px fills the screen
+  const f = document.createElement('iframe');
+  f.id = 'screen';
+  f.src = APPSRC;
+  f.style.width  = LAYOUT_W + 'px';
+  f.style.height = (hPx / k) + 'px';
+  f.style.transform = `scale(${k})`;
+  f.style.transformOrigin = 'top left';
+  return f;
+}
+
+/* Hand-held micro-motion. A plate locked to the pixel for 25 seconds is one of the loudest
+   CGI tells — a real hand always breathes and drifts. The recorder calls window.__pose(t)
+   with the clip's virtual time before each frame, so the drift is deterministic and
+   frame-accurate (no rAF, which a stop-motion capture would sample unevenly).
+   Baseline scale is >1 so the drifting plate never exposes an edge. */
+const POSE = parseFloat(Q.get('pose') || '1');       // 0 disables, >1 exaggerates
+function installPose(wrap) {
+  const base = TILT ? `rotateY(${TILT}deg)` : '';
+  window.__pose = (t) => {
+    if (!POSE) return;
+    const a = POSE;
+    // incommensurable frequencies => never visibly repeats
+    const x = (Math.sin(t * 0.61) * 0.55 + Math.sin(t * 0.23 + 1.7) * 0.35) * a;
+    const y = (Math.sin(t * 0.47 + 0.9) * 0.50 + Math.sin(t * 0.19 + 2.4) * 0.30) * a;
+    const r = (Math.sin(t * 0.29 + 0.4) * 0.16 + Math.sin(t * 0.13 + 1.1) * 0.09) * a;
+    // Baseline overscan must exceed max |translate| + the corner swing from rotate(), or the
+    // drifting plate briefly exposes a black gap at the frame edge (measured: 0.9% of edge
+    // pixels at scale 1.018). It scales WITH the amplitude so raising `pose` can't silently
+    // outrun the cover.
+    const s = 1 + 0.034 * Math.max(1, a) + Math.sin(t * 0.21 + 0.6) * 0.0035 * a;
+    wrap.style.transform = `translate(${x.toFixed(3)}%, ${y.toFixed(3)}%) rotate(${r.toFixed(3)}deg) scale(${s.toFixed(4)}) ${base}`;
+  };
+  window.__pose(0);
+}
+
+/* macOS + Safari-for-Mac chrome. Same measure-then-size trick as the iOS build: lay the
+   chrome out first, ask how much height is left, and give the iframe exactly that. */
+function buildMacScreen(wPx, hPx, k) {
+  const hPt = hPx / k;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `position:absolute;left:0;top:0;width:${LAYOUT_W}px;height:${hPt}px;`
+                     + `transform:scale(${k});transform-origin:top left;`;
+  const mac = document.createElement('div');
+  mac.className = 'mac';
+  const menu = (t, b) => `<span${b ? ' class="app"' : ''}>${t}</span>`;
+  mac.innerHTML =
+      `<div class="menubar">`
+    +   `<span class="left">`
+    +     `<svg viewBox="0 0 16 20" width="15" height="18"><path fill="#fff" d="M11 3.2c.6-.75 1-1.77.9-2.8-.86.04-1.9.58-2.53 1.32-.56.65-1.05 1.7-.92 2.7.96.08 1.94-.49 2.55-1.22zM12.9 10.6c-.02-2.1 1.72-3.11 1.8-3.16-.98-1.44-2.5-1.63-3.04-1.65-1.3-.13-2.53.76-3.19.76-.65 0-1.67-.74-2.75-.72-1.41.02-2.72.82-3.45 2.08-1.47 2.55-.38 6.33 1.05 8.4.7 1.01 1.53 2.15 2.62 2.11 1.05-.04 1.45-.68 2.72-.68 1.27 0 1.63.68 2.74.66 1.13-.02 1.85-1.03 2.54-2.05.8-1.17 1.13-2.3 1.15-2.36-.03-.01-2.2-.84-2.22-3.35z"/></svg>`
+    +     menu('Safari', true) + menu('File') + menu('Edit') + menu('View') + menu('History')
+    +     menu('Bookmarks') + menu('Window') + menu('Help')
+    +   `</span>`
+    +   `<span class="right">`
+    +     `<svg viewBox="0 0 20 14" width="17" height="13"><path d="M10 12.2 7.2 9.4a4 4 0 0 1 5.6 0zM4.4 6.6a8 8 0 0 1 11.2 0l-1.5 1.5a5.9 5.9 0 0 0-8.2 0zM1.6 3.8a12 12 0 0 1 16.8 0L17 5.3a10 10 0 0 0-14 0z" fill="#fff"/></svg>`
+    +     `<svg viewBox="0 0 28 13" width="25" height="12"><rect x=".7" y=".7" width="23" height="11.6" rx="3.5" fill="none" stroke="#fff" stroke-opacity=".55"/><rect x="2.2" y="2.2" width="16" height="8.6" rx="2.2" fill="#fff"/><path d="M25.2 4.4v4.2a2.6 2.6 0 0 0 0-4.2z" fill="#fff" fill-opacity=".6"/></svg>`
+    +     `<span>${TIME}</span>`
+    +   `</span>`
+    + `</div>`
+    + `<div class="notch"></div>`
+    + `<div class="win">`
+    +   `<div class="toolbar">`
+    +     `<span class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>`
+    +     `${svg('<path d="M15 4 L7 12 L15 20"/>')}${svg('<path d="M9 4 L17 12 L9 20"/>')}`
+    +     `<div class="urlbar"><span style="font-size:11px">&#128274;</span><span>${URLTEXT}</span></div>`
+    +     `${svg('<path d="M12 15V3M12 3 L8 7M12 3 L16 7"/><path d="M5 12v8h14v-8"/>')}`
+    +     `${svg('<path d="M4 6h16M4 12h16M4 18h16"/>')}`
+    +   `</div>`
+    +   `<div class="tabbar">`
+    +     `<div class="tab"><span style="font-size:11px">&#9679;</span>${(Q.get('tab')||URLTEXT)}</div>`
+    +     `<div class="tab dim">New Tab</div>`
+    +   `</div>`
+    +   `<div class="web"></div>`
+    + `</div>`;
+  wrap.appendChild(mac);
+  document.body.appendChild(wrap);          // measure the chrome before sizing the iframe
+  const webH = mac.querySelector('.web').getBoundingClientRect().height;
+  wrap.remove();
+
+  const f = makeIframe(wPx, webH * k);
+  f.style.transform = 'none';
+  f.style.width = LAYOUT_W + 'px';
+  f.style.height = webH + 'px';
+  mac.querySelector('.web').appendChild(f);
+  return wrap;
+}
+
+const ICONS = {
+  back:  '<path d="M15 4 L7 12 L15 20"/>',
+  fwd:   '<path d="M9 4 L17 12 L9 20"/>',
+  share: '<path d="M12 15V3M12 3 L8 7M12 3 L16 7"/><path d="M5 12v8h14v-8"/>',
+  book:  '<path d="M6 4h12v17l-6-4-6 4z"/>',
+  tabs:  '<rect x="3" y="6" width="13" height="13" rx="2"/><path d="M8 6V4h13v13h-2"/>',
+};
+function svg(d) { return `<svg viewBox="0 0 24 24">${d}</svg>`; }
+
+/* Build what actually lives on the glass, at LAYOUT_W logical points, scaled to fill the
+   screen area. With chrome=safari the iframe is only the WEB CONTENT band: the status bar
+   and Safari's bottom bar take real space, exactly as they do on a phone. */
+function buildScreen(wPx, hPx) {
+  const k = wPx / LAYOUT_W;
+  if (CHROME === 'macos') return buildMacScreen(wPx, hPx, k);
+  if (CHROME !== 'safari') return makeIframe(wPx, hPx);
+
+  const hPt = hPx / k;                                  // screen height in layout points
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `position:absolute;left:0;top:0;width:${LAYOUT_W}px;height:${hPt}px;`
+                     + `transform:scale(${k});transform-origin:top left;`;
+  const ios = document.createElement('div');
+  ios.className = 'ios';
+  ios.innerHTML =
+    `<div class="status"><span>${TIME}</span>`
+    + `<span class="icons">`
+      + `<svg viewBox="0 0 20 12" width="18" height="12"><path d="M1 9h2v3H1zM5 6.5h2V12H5zM9 4h2v8H9zM13 1.5h2V12h-2z" fill="#000"/></svg>`
+      + `<svg viewBox="0 0 20 14" width="17" height="13"><path d="M10 12.2 7.2 9.4a4 4 0 0 1 5.6 0zM4.4 6.6a8 8 0 0 1 11.2 0l-1.5 1.5a5.9 5.9 0 0 0-8.2 0zM1.6 3.8a12 12 0 0 1 16.8 0L17 5.3a10 10 0 0 0-14 0z" fill="#000"/></svg>`
+      + `<svg viewBox="0 0 28 13" width="26" height="12"><rect x=".7" y=".7" width="23" height="11.6" rx="3.5" fill="none" stroke="#000" stroke-opacity=".38"/><rect x="2.2" y="2.2" width="17" height="8.6" rx="2.2" fill="#000"/><path d="M25.2 4.4v4.2a2.6 2.6 0 0 0 0-4.2z" fill="#000" fill-opacity=".45"/></svg>`
+    + `</span></div>`
+    + `<div class="island"></div>`
+    + `<div class="web"></div>`
+    + `<div class="safari">`
+      + `<div class="urlrow"><div class="pill">`
+        + `<span style="font-size:13px">&#128274;</span><span>${URLTEXT}</span>`
+      + `</div></div>`
+      + `<div class="toolbar">${svg(ICONS.back)}${svg(ICONS.fwd)}${svg(ICONS.share)}${svg(ICONS.book)}${svg(ICONS.tabs)}</div>`
+      + `<div class="home"><i></i></div>`
+    + `</div>`;
+  wrap.appendChild(ios);
+  document.body.appendChild(wrap);          // measure the chrome before sizing the iframe
+  const webH = ios.querySelector('.web').getBoundingClientRect().height / 1;
+  wrap.remove();
+
+  const f = makeIframe(wPx, webH * k);      // iframe fills only the web band
+  f.style.transform = 'none';               // the whole stack is scaled by `wrap`
+  f.style.width = LAYOUT_W + 'px';
+  f.style.height = webH + 'px';
+  ios.querySelector('.web').appendChild(f);
+  return wrap;
+}
+
+// Solve the 3x3 homography mapping the unit-ish source rect (0,0,w,h) -> dst quad, and
+// express it as a CSS matrix3d. Gaussian elimination on the standard 8x8 system.
+function homographyMatrix3d(w, h, dst) {
+  const src = [[0,0],[w,0],[w,h],[0,h]];
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [X, Y] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -X*x, -X*y]); b.push(X);
+    A.push([0, 0, 0, x, y, 1, -Y*x, -Y*y]); b.push(Y);
+  }
+  for (let c = 0; c < 8; c++) {                      // partial-pivot elimination
+    let p = c;
+    for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    const d = A[c][c] || 1e-12;
+    for (let r = 0; r < 8; r++) {
+      if (r === c) continue;
+      const f = A[r][c] / d;
+      for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k];
+      b[r] -= f * b[c];
+    }
+  }
+  const v = A.map((row, i) => b[i] / (row[i] || 1e-12));
+  const [a,bb,c0,d0,e,f,g,i2] = v;                   // h11 h12 h13 h21 h22 h23 h31 h32
+  return `matrix3d(${a},${d0},0,${g}, ${bb},${e},0,${i2}, 0,0,1,0, ${c0},${f},0,1)`;
+}
+
+if (FRAME && QUAD.length === 8) {
+  // ---------- photoreal frame, PERSPECTIVE (tilted screen) ----------
+  const wrap = document.createElement('div');
+  wrap.className = 'photo'; wrap.id = 'dev';
+  const img = document.createElement('img'); img.src = FRAME;
+  wrap.appendChild(img); stage.appendChild(wrap);
+
+  img.onload = () => {
+    const k = Math.min(innerWidth / img.naturalWidth, innerHeight / img.naturalHeight);
+    const W = Math.round(img.naturalWidth * k), H = Math.round(img.naturalHeight * k);
+    img.style.width = W + 'px';
+
+    const pts = [];
+    for (let i = 0; i < 8; i += 2) pts.push([QUAD[i] / 100 * W, QUAD[i+1] / 100 * H]);
+    // screen size in layout px: use the quad's average edge lengths
+    const el = (a, b) => Math.hypot(pts[b][0]-pts[a][0], pts[b][1]-pts[a][1]);
+    const sw = (el(0,1) + el(3,2)) / 2, sh = (el(0,3) + el(1,2)) / 2;
+
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;';
+    host.style.width = sw + 'px'; host.style.height = sh + 'px';
+    host.style.transform = homographyMatrix3d(sw, sh, pts);
+
+    const sc = document.createElement('div');
+    sc.className = 'screen';
+    sc.style.cssText = 'position:absolute;inset:0;overflow:hidden;';
+    sc.style.borderRadius = (sw * RAD / 100) + 'px';
+    sc.appendChild(buildScreen(sw, sh));
+    sc.insertAdjacentHTML('beforeend',
+      '<div class="warm"></div><div class="vig"></div><div class="sheen"></div>');
+    host.appendChild(sc);
+    wrap.appendChild(host);
+
+    // Screen light spilling onto the wing and the room. This goes ON TOP of the plate:
+    // the plate is fully opaque, so the old `.glow` layered behind it did nothing at all.
+    const cx = pts.reduce((s,p)=>s+p[0],0)/4, cy = pts.reduce((s,p)=>s+p[1],0)/4;
+    const g = document.createElement('div');
+    g.className = 'spill';
+    g.style.left = (cx - sw*1.05) + 'px'; g.style.top = (cy - sh*.85) + 'px';
+    g.style.width = (sw*2.1) + 'px';      g.style.height = (sh*1.7) + 'px';
+    wrap.appendChild(g);
+
+    if (TILT) wrap.style.transform = `rotateY(${TILT}deg)`;
+    installPose(wrap);
+    window.__stageReady = true;
+  };
+} else if (FRAME && RECT.length === 4) {
+  // ---------- photoreal frame ----------
+  const wrap = document.createElement('div');
+  wrap.className = 'photo';
+  wrap.id = 'dev';
+  const img = document.createElement('img');
+  img.src = FRAME;
+  wrap.appendChild(img);
+  stage.appendChild(wrap);
+
+  img.onload = () => {
+    // size the device to fit the viewport
+    const pad = DEVICE === 'phone' ? 0.94 : 0.92;
+    const k = Math.min(innerWidth / img.naturalWidth, innerHeight / img.naturalHeight) * pad;
+    const W = Math.round(img.naturalWidth * k), H = Math.round(img.naturalHeight * k);
+    img.style.width = W + 'px';
+
+    const [l, t, w, h] = RECT;
+    const sx = Math.round(W * l / 100), sy = Math.round(H * t / 100);
+    const sw = Math.round(W * w / 100), sh = Math.round(H * h / 100);
+
+    const sc = document.createElement('div');
+    sc.className = 'screen';
+    sc.style.left = sx + 'px'; sc.style.top = sy + 'px';
+    sc.style.width = sw + 'px'; sc.style.height = sh + 'px';
+    sc.style.borderRadius = (sw * RAD / 100) + 'px';
+    sc.appendChild(buildScreen(sw, sh));
+    sc.insertAdjacentHTML('beforeend',
+      '<div class="warm"></div><div class="vig"></div><div class="sheen"></div>');
+    wrap.appendChild(sc);
+
+    // glow sized to the screen, sitting UNDER the frame image
+    const g = document.createElement('div');
+    g.className = 'glow';
+    g.style.left = (sx - sw * .16) + 'px'; g.style.top = (sy - sh * .10) + 'px';
+    g.style.width = (sw * 1.32) + 'px';    g.style.height = (sh * 1.22) + 'px';
+    wrap.insertBefore(g, img);
+
+    if (TILT) wrap.style.transform = `rotateY(${TILT}deg)`;
+    window.__stageReady = true;
+  };
+} else {
+  // ---------- CSS-drawn fallback ----------
+  const SPEC = { phone: { w: 1080, h: 2340 }, laptop: { w: 2400, h: 1500 } }[DEVICE];
+  const html = DEVICE === 'phone' ? `
+    <div class="dv-phone" id="dev">
+      <div class="dv-glow"></div><div class="dv-contact"></div>
+      <span class="dv-btn left action"></span><span class="dv-btn left volup"></span>
+      <span class="dv-btn left voldn"></span><span class="dv-btn right side"></span>
+      <div class="dv-glass" id="glass"><div class="dv-island"></div>
+        <div class="dv-vig"></div><div class="dv-sheen"></div><div class="dv-edge"></div></div>
+    </div>` : `
+    <div class="dv-laptop" id="dev">
+      <div class="dv-glow"></div><div class="dv-contact"></div>
+      <div class="dv-lid"><div class="dv-inner"><div class="dv-glass" id="glass">
+        <div class="dv-notch"></div><div class="dv-cam"></div>
+        <div class="dv-vig"></div><div class="dv-sheen"></div><div class="dv-edge"></div>
+      </div></div><div class="dv-chin">${Q.get('chin')||''}</div></div>
+      <div class="dv-base"><span class="dv-lip"></span></div>
+    </div>`;
+  stage.innerHTML = html;
+  const dev = document.getElementById('dev');
+  dev.style.setProperty('--screen-w', SPEC.w + 'px');
+  const glass = document.getElementById('glass');
+  glass.insertBefore(makeIframe(SPEC.w, SPEC.h), glass.firstChild);
+  const fit = () => {
+    dev.style.zoom = '1';
+    const r = dev.getBoundingClientRect();
+    const pad = DEVICE === 'phone' ? .90 : .86;
+    dev.style.zoom = String(Math.min(innerWidth / r.width, innerHeight / r.height) * pad);
+  };
+  new ResizeObserver(fit).observe(document.body); fit();
+  if (TILT) dev.style.transform = `rotateY(${TILT}deg)`;
+  window.__stageReady = true;
+}
+</script>
+</body>
+</html>
