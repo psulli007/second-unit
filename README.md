@@ -69,6 +69,7 @@ need to go further down.
 | `examples/03-record-4k.js` | 3840×2400 / 2160×3840 | slow | hero footage |
 | `examples/04-record-stopmotion.js` | same, sharper | ~15 s wall per 1 s output | the sharpest thing here |
 | `examples/05-record-device-stage.js` | app live on a photoreal device | slow | hardware shots |
+| `examples/06-record-third-party-site.js` | your product inside a page you don't own | fast | embeds, plugins, widgets |
 
 Two non-obvious things they solve:
 
@@ -79,6 +80,15 @@ the same factor so responsive logic still behaves — and the layout genuinely r
 3–4×. `scripts/stopmo-common.js` goes further: `page.screenshot()` *does* respect
 `deviceScaleFactor`, so it drives the UI in deterministic steps and screenshots every output
 frame. Native layout, native breakpoints, genuinely crisp text.
+
+**For anything embedded, the product only exists inside someone else's page.** A widget, a
+plugin, a script tag — filmed on a localhost harness it looks like a mockup of itself.
+`scripts/site-common.js` films it in a real host page: ad and tracker hosts blocked so a
+stranger's creative never lands in a frame, a document-start redactor for a demo tenant built
+from a stock theme, asset swaps for a logo or a stock author photo, and a deploy-freshness
+check so you never film a build older than your checkout. What it cannot do is touch pixels —
+a name baked into a photo survives everything, so read the frames before you cut. Filming a
+customer's live site is a consent question before it is a technical one.
 
 **A UI pasted onto a photo of a phone never survives a second look.**
 `scripts/device-stage.js` renders the device frame and the live app together in one page, so
@@ -99,6 +109,13 @@ are cut on those marks. Cutting blind against a stopwatch lands cuts mid-keystro
 node scripts/build-flowcut.js raw.webm out.mp4 spec.json [vertical]
 node scripts/add-music.sh out.mp4 track.mp3 final.mp4 -14
 ```
+
+Cards and captions are drawn from `BRAND_*` in `config.env`, and a spec's own `brand` block
+overrides them per cut — so one studio produces a client-branded video (their font, their
+gradient, their logo on the cards) without forking the cutter. A spec-level `xf` dissolves
+every join instead of hard-cutting; a segment's own `xf: 0` keeps that one a cut. Vertical
+specs take `fgh`/`crop`/`fgy`/`capTop`/`bgDim` for phone captures that are taller than 9:16,
+so the caption sits above the app instead of on it.
 
 ### Verifying
 
@@ -125,6 +142,10 @@ Markdown skills for Claude (or any agent that reads `SKILL.md` files). They're t
 prompt craft — including the failures, which is most of the value. Drop the ones you want into
 `~/.claude/skills/` or your project's `.claude/skills/`.
 
+**Start here**
+- `studio-router` — the entry point: standing rules, then which pipeline a request belongs to.
+  Install this one at user level so it fires wherever the studio is cloned.
+
 **Characters and assets**
 - `story-bible-builder` — interview-driven: turns a story or brand into one dense canon
   document, shipped as an installable skill so every later prompt already knows the world.
@@ -144,11 +165,16 @@ prompt craft — including the failures, which is most of the value. Drop the on
   than timbre.
 - `character-lipsync` — generate *with* the audio rather than repainting the mouth after;
   what works, what silently no-ops.
+- `talking-head-concept-video` — the 22–45 s vertical format: character hook, pivot, product
+  b-roll. The sync-verification gates, and the fps-before-zoompan bug that desyncs a whole cut
+  without printing a warning.
 
 **Product**
 - `product-demo-videos` — MARK-based cutting, per-platform specs, the hook rule.
 - `device-screen-studio` — real UI on a real-looking device, without compositing artifacts.
 - `pov-device-film` — the full runbook for a character using a device with the live app on it.
+- `social-publishing` — posting a finished cut without sending it to the wrong account:
+  package layout, dry-run-first, and the account-targeting rule.
 
 ---
 

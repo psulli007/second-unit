@@ -32,7 +32,19 @@ const rel = (f) => path.relative(ROOT, f);
 console.log('\nJavaScript syntax');
 const js = files.filter(f => f.endsWith('.js'));
 for (const f of js) {
-  try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); }
+  const src = fs.readFileSync(f, 'utf8');
+  // A .js file holding top-level import/export is ESM inside a CommonJS package; `node --check`
+  // reads it as CJS and reports a syntax error that is only about the module system.
+  const esm = /^\s*(export\s|import\s.+\sfrom\s)/m.test(src.slice(0, 4000));
+  // And an agent workflow script is a third dialect: `export const meta` plus a top-level
+  // `return`, because its runtime wraps the body in a function. Check it the same way, so a
+  // real syntax error is still caught.
+  const wf = esm && /^export const meta\s*=/m.test(src) && /^return[\s{]/m.test(src);
+  try {
+    if (wf) execFileSync(process.execPath, ['--input-type=module', '--check'], { input: `async function __wf(){\n${src.replace(/^export /gm, '')}\n}`, stdio: ['pipe', 'pipe', 'pipe'] });
+    else if (esm) execFileSync(process.execPath, ['--input-type=module', '--check'], { input: src, stdio: ['pipe', 'pipe', 'pipe'] });
+    else execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' });
+  }
   catch (e) { fail(`${rel(f)} does not parse\n${e.stderr?.toString().trim()}`); }
 }
 ok(`${js.length} files parse`);
@@ -40,9 +52,13 @@ ok(`${js.length} files parse`);
 // ── 2. Local requires resolve ───────────────────────────────────────────────────────────
 console.log('\nLocal requires');
 let checked = 0;
+// Created by the operator from templates/, gitignored on purpose: an example that requires
+// one is telling you to copy the template, not pointing at a missing file.
+const FROM_TEMPLATE = /(^|\/)widget-options$/;
 for (const f of js) {
   const src = fs.readFileSync(f, 'utf8');
   for (const m of src.matchAll(/require\(\s*['"](\.[^'"]+)['"]\s*\)/g)) {
+    if (FROM_TEMPLATE.test(m[1])) continue;
     const target = path.resolve(path.dirname(f), m[1]);
     const found = fs.existsSync(target) || fs.existsSync(target + '.js') ||
                   fs.existsSync(path.join(target, 'index.js'));
@@ -60,9 +76,13 @@ const docs = files.filter(f => f.endsWith('.md'));
 let refs = 0, missing = new Set();
 for (const f of docs) {
   const src = fs.readFileSync(f, 'utf8');
-  for (const m of src.matchAll(/\b((?:scripts|templates|examples|lib|docs|demo-app)\/[A-Za-z0-9._\/-]+\.(?:js|sh|py|html|css|json|md))/g)) {
+  // The lookbehind keeps a path from matching as the TAIL of a longer one — a doc naming
+  // `other-repo/scripts/foo.js` is talking about another checkout, not about this one.
+  for (const m of src.matchAll(/(?<![\w/-])((?:scripts|templates|examples|lib|docs|demo-app)\/[A-Za-z0-9._\/-]+\.(?:js|sh|py|html|css|json|md))/g)) {
     refs++;
-    if (!fs.existsSync(path.join(ROOT, m[1]))) missing.add(`${rel(f)} -> ${m[1]}`);
+    // A doc inside a sub-project names paths relative to ITSELF, not to the repo root.
+    const here = path.join(path.dirname(f), m[1]);
+    if (!fs.existsSync(here) && !fs.existsSync(path.join(ROOT, m[1]))) missing.add(`${rel(f)} -> ${m[1]}`);
   }
 }
 for (const m of missing) fail(`dangling path reference: ${m}`);
